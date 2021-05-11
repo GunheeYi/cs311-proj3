@@ -140,8 +140,13 @@
 #define norOp;
 
 /* functions */
+uint32_t ZeroExtImm(short imm);
+uint32_t SignExtImm(short imm);
+uint32_t BranchAddr(short imm);
+uint32_t JumpAddr(int address);
+uint32_t ALU(instruction instr, uint32_t a, uint32_t b);
 instruction*	get_inst_info(uint32_t pc);
-Controls getControls(uint32_t pc);
+// Controls getControls(uint32_t pc);
 void		process_instruction();
 
 /* Add any functions declarations that you require */
