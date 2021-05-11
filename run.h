@@ -110,15 +110,45 @@
     *(DEST_A) = (VALUE);			\
 }
 
+#define ADDIU 0x9
+#define ANDI 0xc
+#define LUI 0xf
+#define ORI 0xd
+#define SLTIU 0xb
+#define LW 0x23
+#define SW 0x2b
+#define BEQ 0x4
+#define BNE 0x5
+#define ADDU 0x21
+#define AND 0x24
+#define JR 0x08
+#define NOR 0x27
+#define OR 0x25
+#define SLTU 0x2b
+#define SLL 0x00
+#define SRL 0x02
+#define SUBU 0x23
+#define J 0x2
+#define JAL 0x3
+
+#define addOp;
+#define subOp;
+#define andOp;
+#define orOp;
+#define sllOp;
+#define srlOp;
+#define norOp;
+
 /* functions */
 instruction*	get_inst_info(uint32_t pc);
+Controls getControls(uint32_t pc);
 void		process_instruction();
 
 /* Add any functions declarations that you require */
 /* Suggestions for some possible functions */
-//void		IF_Stage();
-//void		ID_Stage();
-//void		EX_Stage();
-//void		MEM_Stage();
-//void		WB_Stage();
+void		IF_Stage();
+void		ID_Stage();
+void		EX_Stage();
+void		MEM_Stage();
+void		WB_Stage();
 #endif

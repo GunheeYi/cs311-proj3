@@ -114,6 +114,18 @@ typedef struct inst_s {
     //char *source_line;
 } instruction;
 
+// typedef struct _Controls {
+// 	short ALUSrc;
+// 	short ALUOp;
+// 	short RegDst;
+// 	short Branch;
+// 	short MemWrite;
+// 	short MemRead;
+// 	short MemtoReg;
+// 	short RegWrite;
+// 	short Jump;
+// } Controls;
+
 
 typedef struct {
     uint32_t start, size;
