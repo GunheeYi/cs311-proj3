@@ -117,8 +117,9 @@ uint32_t ALU(instruction instr, uint32_t a, uint32_t b) {
 
     	    //J format
 	    case 0x2:		//J
-	    case 0x3:		//JAL
             return 0;
+	    case 0x3:		//JAL
+            return a; // PC + 4 value is passed through CURRENT_STATE.ID_EX_REG1 latch
     }
 }
 
@@ -175,22 +176,35 @@ void ID_Stage() {
     unsigned char shamt = instr.r_t.r_i.r_i.r.shamt;
     uint32_t target = instr.r_t.target;
 
-    CURRENT_STATE.ID_EX_REG1 = CURRENT_STATE.REGS[rs];
-    CURRENT_STATE.ID_EX_REG2 = CURRENT_STATE.REGS[rt];
+    if (instr.opcode==0 && instr.func_code==JR) {
+        CURRENT_STATE.PIPE[0] = 0; // flush
+        CURRENT_STATE.PC = JumpAddr(CURRENT_STATE.REGS[31]);
+    } else if (instr.opcode==J) {
+        CURRENT_STATE.PIPE[0] = 0; // flush
+        CURRENT_STATE.PC = JumpAddr(target);
+    } else if (instr.opcode==JAL) {
+        CURRENT_STATE.PIPE[0] = 0; // flush
+        CURRENT_STATE.PC = JumpAddr(target);
+        CURRENT_STATE.ID_EX_REG1 = CURRENT_STATE.PIPE[1] + 4;
+    } else { // if not jump
+        CURRENT_STATE.ID_EX_REG1 = CURRENT_STATE.REGS[rs];
+        CURRENT_STATE.ID_EX_REG2 = CURRENT_STATE.REGS[rt];
 
-    if (instr.opcode==ANDI || instr.opode==ORI) CURRENT_STATE.ID_EX_IMM = ZeroExtImm(imm);
-    else CURRENT_STATE.ID_EX_IMM = SignExtImm(imm);
+        if (instr.opcode==ANDI || instr.opode==ORI) CURRENT_STATE.ID_EX_IMM = ZeroExtImm(imm);
+        else CURRENT_STATE.ID_EX_IMM = SignExtImm(imm);
 
-    if (type(instr)=='R') CURRENT_STATE.ID_EX_DEST = rd;
-    else CURRENT_STATE.ID_EX_DEST = rs;
-    
+        if (type(instr)=='R') CURRENT_STATE.ID_EX_DEST = rd;
+        else if (instr.opcode==JAL) CURRENT_STATE.ID_EX_DEST = 31;
+        else CURRENT_STATE.ID_EX_DEST = rt;
+    }
+
 }
 
 void EX_Stage() {
-    CURRENT_STATE.EX_MEM_NPC = CURRENT_STATE.ID_EX_NPC + (CURRENT_STATE.ID_EX_IMM << 2);
+    CURRENT_STATE.EX_MEM_BR_TARGET = CURRENT_STATE.ID_EX_NPC + (CURRENT_STATE.ID_EX_IMM << 2);
 
     instruction instr = *get_inst_info(CURRENT_STATE.PIPE[2]);
-    
+    // 고쳐야하ㅏㅏㅏㅏㅏㅏㅏㅏㅏㅏㅏㅏㅏㅏㅏㅏㅏㅏㅏㅏㅏㅏㅏㅏㅏㅏㅁㅁㅁㅁㅁㅁㅁㅁㅁㅁㅁㅁㅁㅁㅁㅁㅁㅁㅁㅁㅁㅁㅁㅁㅁ
     uint32_t rtOrImm = (type(instr)=='R' || instr.opcode==BEQ || instr.opcode==BNE) ? CURRENT_STATE.ID_EX_REG2 : CURRENT_STATE.ID_EX_IMM;
     CURRENT_STATE.EX_MEM_ALU_OUT = ALU(instr, CURRENT_STATE.ID_EX_REG1, rtOrImm);
     CURRENT_STATE.EX_MEM_BR_TAKE = CURRENT_STATE.EX_MEM_ALU_OUT;
@@ -199,8 +213,12 @@ void EX_Stage() {
 }
 
 void MEM_Stage() {
-    CURRENT_STATE.MEM_WB_NPC = CURRENT_STATE.EX_MEM_NPC;
     instruction instr = *get_inst_info(CURRENT_STATE.PIPE[3]);
+
+    if((instr.opcode==BEQ || instr.opcode==BNE) && CURRENT_STATE.EX_MEM_ALU_OUT) { // if branch instruction and should take
+        CURRENT_STATE.PIPE[0] = 0; // flush
+        CURRENT_STATE.PC = JumpAddr(target);  // and set PC for next instruction
+    }
 
     if (instr.opcode==LW) CURRENT_STATE.MEM_WB_MEM_OUT = mem_read_32(CURRENT_STATE.REGS[CURRENT_STATE.EX_MEM_ALU_OUT]);
     else if (instr.opcode==SW) mem_write_32(CURRENT_STATE.REGS[CURRENT_STATE.EX_MEM_ALU_OUT], CURRENT_STATE.EX_MEM_W_VALUE);
