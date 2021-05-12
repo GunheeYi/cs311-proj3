@@ -147,13 +147,14 @@ uint32_t JumpAddr(int address);
 uint32_t ALU(instruction instr, uint32_t a, uint32_t b);
 instruction*	get_inst_info(uint32_t pc);
 // Controls getControls(uint32_t pc);
-void		process_instruction();
+
 
 /* Add any functions declarations that you require */
 /* Suggestions for some possible functions */
-void		IF_Stage();
-void		ID_Stage();
-void		EX_Stage();
-void		MEM_Stage();
-void		WB_Stage();
+void		IF();
+void		ID();
+void		EX();
+void		MEM();
+void		WB();
+void		process_instruction();
 #endif
