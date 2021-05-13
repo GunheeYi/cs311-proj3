@@ -76,6 +76,7 @@ uint32_t JumpAddr(int address) {
 }
 
 uint32_t ALU(instruction instr, uint32_t a, uint32_t b) {
+    //printf("ALU input -- a: 0x%08x, b: 0x%08x\n", a, b);
     switch(instr.opcode) {
         	    //I format
 	    case 0x9:		//ADDIU
@@ -87,14 +88,12 @@ uint32_t ALU(instruction instr, uint32_t a, uint32_t b) {
 	    case 0xf:		//LUI	
             return (b << 16) & 0xffff0000;
 	    case 0xd:		//ORI
-            //printf("--------------------------------------------0x%010x, 0x%010x\n", a, b);
             return a | b;
 	    case 0xb:		//SLTIU
             return (a < b) ? 1 : 0;
 	    case 0x4:		//BEQ
             return (a == b) ? 1 : 0;
 	    case 0x5:		//BNE
-            // printf("--------------------------------------------0x%010x, 0x%010x\n", a, b);
             return (a != b) ? 1 : 0;
     	    //R format
 	    case 0x0:		//ADDU, AND, NOR, OR, SLTU, SLL, SRL, SUBU if JR
@@ -135,14 +134,25 @@ unsigned char RegWrite(instruction instr) {
     if ((type(instr)=='R' && instr.opcode!=JR) || (type(instr)=='I' && instr.opcode!=SW && instr.opcode!=BEQ && instr.opcode!=BNE) || instr.opcode==JAL) return 1;
     else return 0;
 }
+unsigned char MemRead(instruction instr) {
+    return (instr.opcode==LW) ? 1 : 0;
+}
 
 void IF() {
     instruction instr = *get_inst_info(CURRENT_STATE.PIPE[0]);
     CURRENT_STATE.IF_ID_INST = instr.value;
     CURRENT_STATE.IF_ID_NPC = CURRENT_STATE.PC;
+
+    CURRENT_STATE.IF_ID_RS = instr.r_t.r_i.rs;
+    CURRENT_STATE.IF_ID_RT = instr.r_t.r_i.rt;
 }
 
 void ID() {
+
+    if (CURRENT_STATE.ID_EX_MemRead && ((CURRENT_STATE.ID_EX_RT==CURRENT_STATE.IF_ID_RS) || (CURRENT_STATE.ID_EX_RT==CURRENT_STATE.IF_ID_RT))) {
+        CURRENT_STATE.PIPE_STALL[1] = 1;
+    }
+
     CURRENT_STATE.ID_EX_NPC = CURRENT_STATE.IF_ID_NPC;
 
     instruction instr = *get_inst_info(CURRENT_STATE.PIPE[1]);
@@ -153,16 +163,20 @@ void ID() {
     unsigned char shamt = instr.r_t.r_i.r_i.r.shamt;
     uint32_t target = instr.r_t.target;
 
-    
+    CURRENT_STATE.ID_EX_RS = 0;
+    CURRENT_STATE.ID_EX_RT = 0;
 
     if (instr.opcode==0 && instr.func_code==JR) {
-        CURRENT_STATE.PIPE[0] = 0; // flush
-        CURRENT_STATE.PC = JumpAddr(CURRENT_STATE.REGS[31]);
+        // CURRENT_STATE.PIPE[0] = 0; // flush
+        CURRENT_STATE.PIPE_FLUSH[0] = 1; // flush
+        CURRENT_STATE.PC = CURRENT_STATE.REGS[31];
     } else if (instr.opcode==J) {
-        CURRENT_STATE.PIPE[0] = 0; // flush
+        // CURRENT_STATE.PIPE[0] = 0; // flush
+        CURRENT_STATE.PIPE_FLUSH[0] = 1; // flush
         CURRENT_STATE.PC = JumpAddr(target);
     } else if (instr.opcode==JAL) {
-        CURRENT_STATE.PIPE[0] = 0; // flush
+        // CURRENT_STATE.PIPE[0] = 0; // flush
+        CURRENT_STATE.PIPE_FLUSH[0] = 1; // flush
         CURRENT_STATE.PC = JumpAddr(target);
         CURRENT_STATE.ID_EX_REG1 = CURRENT_STATE.PIPE[1] + 4;
     } else { // if not jump
@@ -172,21 +186,28 @@ void ID() {
         if (instr.opcode==ANDI || instr.opcode==ORI) CURRENT_STATE.ID_EX_IMM = ZeroExtImm(imm);
         else CURRENT_STATE.ID_EX_IMM = SignExtImm(imm);
 
-        if (type(instr)=='R') CURRENT_STATE.ID_EX_DEST = rd;
-        else if (instr.opcode==JAL) CURRENT_STATE.ID_EX_DEST = 31;
-        else CURRENT_STATE.ID_EX_DEST = rt;
-
         CURRENT_STATE.ID_EX_RS = rs;
+        // CURRENT_STATE.ID_EX_RT = (instr.opcode==LW) ? 0 : rt;
         CURRENT_STATE.ID_EX_RT = rt;
+        //printf("ID_EX_RS: 0x%08x, ID_EX_RT: 0x%08x", CURRENT_STATE.ID_EX_RS, CURRENT_STATE.ID_EX_RT);
     }
 
+    if (type(instr)=='R') CURRENT_STATE.ID_EX_DEST = rd;
+    else if (instr.opcode==JAL) CURRENT_STATE.ID_EX_DEST = 31;
+    else CURRENT_STATE.ID_EX_DEST = rt;
+
+    
+    
 }
 
 void EX() {
-    CURRENT_STATE.EX_MEM_BR_TARGET = CURRENT_STATE.ID_EX_NPC + (CURRENT_STATE.ID_EX_IMM << 2);
-
     instruction instr = *get_inst_info(CURRENT_STATE.PIPE[2]);
 
+    CURRENT_STATE.EX_MEM_BR_TARGET = CURRENT_STATE.ID_EX_NPC + (CURRENT_STATE.ID_EX_IMM << 2);
+
+    if (CURRENT_STATE.PIPE[3]==0) CURRENT_STATE.EX_MEM_DEST = 0;
+
+    //printf("ID_EX_RS: 0x%08x, ID_EX_RT: 0x%08x", CURRENT_STATE.ID_EX_RS, CURRENT_STATE.ID_EX_RT);
     if (CURRENT_STATE.EX_MEM_RegWrite && (CURRENT_STATE.EX_MEM_DEST!=0) && (CURRENT_STATE.EX_MEM_DEST==CURRENT_STATE.ID_EX_RS)) {
         CURRENT_STATE.ID_EX_REG1 = CURRENT_STATE.EX_MEM_ALU_OUT;
         //printf("Forwarded rs from EX_MEM to EX\n");
@@ -207,12 +228,13 @@ void EX() {
     uint32_t rtOrImm = (type(instr)=='R' || instr.opcode==BEQ || instr.opcode==BNE) ? CURRENT_STATE.ID_EX_REG2 : CURRENT_STATE.ID_EX_IMM;
     CURRENT_STATE.EX_MEM_ALU_OUT = ALU(instr, CURRENT_STATE.ID_EX_REG1, rtOrImm);
     CURRENT_STATE.EX_MEM_BR_TAKE = CURRENT_STATE.EX_MEM_ALU_OUT;
-    //printf("EX Stage -- ALU out: 0x%08x", CURRENT_STATE.EX_MEM_ALU_OUT);
+    //printf("EX Stage -- ALU out: 0x%08x\n", CURRENT_STATE.EX_MEM_ALU_OUT);
 
-    CURRENT_STATE.EX_MEM_W_VALUE = CURRENT_STATE.ID_EX_DEST;
+    CURRENT_STATE.EX_MEM_W_VALUE = CURRENT_STATE.ID_EX_REG2;
     CURRENT_STATE.EX_MEM_DEST = CURRENT_STATE.ID_EX_DEST;
 
     CURRENT_STATE.EX_MEM_RegWrite = RegWrite(instr);
+    CURRENT_STATE.ID_EX_MemRead = MemRead(instr);
 
 }
 
@@ -223,6 +245,9 @@ void MEM() {
         CURRENT_STATE.PIPE[0] = 0; // flush
         CURRENT_STATE.PIPE[1] = 0;
         CURRENT_STATE.PIPE[2] = 0;
+        // CURRENT_STATE.PIPE_FLUSH[0] = 1; // flush
+        // CURRENT_STATE.PIPE_FLUSH[1] = 1; // flush
+        // CURRENT_STATE.PIPE_FLUSH[2] = 1; // flush
         CURRENT_STATE.PC = CURRENT_STATE.EX_MEM_BR_TARGET;  // and set PC for next instruction
     } else {
         if (instr.opcode==LW) {
@@ -235,6 +260,8 @@ void MEM() {
         CURRENT_STATE.MEM_WB_DEST = CURRENT_STATE.EX_MEM_DEST;
 
         CURRENT_STATE.MEM_WB_RegWrite = RegWrite(instr);
+
+        //printf("MEM Stage -- ALU out: 0x%08x\n", CURRENT_STATE.MEM_WB_ALU_OUT);
     }
 }
 
@@ -243,7 +270,10 @@ void WB() {
     if ((type(instr)=='R' && instr.opcode!=JR) || (type(instr)=='I' && instr.opcode!=SW && instr.opcode!=BEQ && instr.opcode!=BNE) || instr.opcode==JAL) {
         //printf("WB stage -- MEM out: 0x%08x,  ALU out: 0x%08x", CURRENT_STATE.MEM_WB_MEM_OUT, CURRENT_STATE.MEM_WB_ALU_OUT);
         if (instr.opcode==LW) CURRENT_STATE.REGS[CURRENT_STATE.MEM_WB_DEST] = CURRENT_STATE.MEM_WB_MEM_OUT;
-        else CURRENT_STATE.REGS[CURRENT_STATE.MEM_WB_DEST] = CURRENT_STATE.MEM_WB_ALU_OUT;
+        else {
+            CURRENT_STATE.REGS[CURRENT_STATE.MEM_WB_DEST] = CURRENT_STATE.MEM_WB_ALU_OUT;
+            //printf("Writing value 0x%08x to register %d\n", CURRENT_STATE.MEM_WB_ALU_OUT, CURRENT_STATE.MEM_WB_DEST);
+        }
     }
 }
 
@@ -257,23 +287,35 @@ void WB() {
 void process_instruction(){
 	/** Your implementation here */
 
-    if(CURRENT_STATE.PC >= MEM_REGIONS[0].start + NUM_INST*4) {
-        RUN_BIT = FALSE;
-        return;
-    }
-
     // CURRENT_STATE.MEM_WB_NPC = CURRENT_STATE.EX_MEM_NPC;
     // CURRENT_STATE.EX_MEM_NPC = CURRENT_STATE.ID_EX_NPC;
     // CURRENT_STATE.ID_EX_NPC = CURRENT_STATE.IF_ID_NPC;
     // CURRENT_STATE.IF_ID_NPC = CURRENT_STATE.PC;
+    
+    unsigned char shouldStall = 0;
+    for(int k = 3; k >= 0; k--) {
+        if (CURRENT_STATE.PIPE_STALL[k]) {
+            shouldStall = 1;
+            CURRENT_STATE.PIPE[k+1] = 0;
+        }
+        if (!shouldStall) CURRENT_STATE.PIPE[k+1] = CURRENT_STATE.PIPE[k];
+    }
+    if(!shouldStall) {
+        if (CURRENT_STATE.PC >= MEM_REGIONS[0].start + NUM_INST * 4) CURRENT_STATE.PIPE[0] = 0;
+        else CURRENT_STATE.PIPE[0] = CURRENT_STATE.PC;
 
-    CURRENT_STATE.PIPE[4] = CURRENT_STATE.PIPE[3];
-    CURRENT_STATE.PIPE[3] = CURRENT_STATE.PIPE[2];
-    CURRENT_STATE.PIPE[2] = CURRENT_STATE.PIPE[1];
-    CURRENT_STATE.PIPE[1] = CURRENT_STATE.PIPE[0];
-    CURRENT_STATE.PIPE[0] = CURRENT_STATE.PC;
+        if(CURRENT_STATE.PC < MEM_REGIONS[0].start + NUM_INST * 4)CURRENT_STATE.PC += 4;
+    }
 
-    CURRENT_STATE.PC += 4;
+    for(int k = 0; k <= 4; k++) {
+        if (CURRENT_STATE.PIPE_FLUSH[k]) CURRENT_STATE.PIPE[k+1] = 0;
+    }
+
+    // reset stall and flush flags to false
+    for(int k = 0; k < 5; k++) {
+        CURRENT_STATE.PIPE_STALL[k] = 0;
+        CURRENT_STATE.PIPE_FLUSH[k] = 0;
+    }
 
     if (CURRENT_STATE.PIPE[4]) {
         WB();
@@ -283,6 +325,11 @@ void process_instruction(){
     if (CURRENT_STATE.PIPE[2]) EX();
     if (CURRENT_STATE.PIPE[1]) ID();
     if (CURRENT_STATE.PIPE[0]) IF();
+
+    if(CURRENT_STATE.PIPE[4] == MEM_REGIONS[0].start + (NUM_INST-1) * 4) {
+        RUN_BIT = FALSE;
+        return;
+    }
 
     // int k;
     // printf("Current register values :\n");
@@ -309,5 +356,7 @@ void process_instruction(){
     // printf("\n\n");
    
     // mdump(0x10000000, 0x100000f0);
+    
+    //printf("PC value: 0x%08x\n", CURRENT_STATE.PC);
     
 }

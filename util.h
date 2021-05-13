@@ -43,6 +43,7 @@ typedef struct CPU_State_Struct {
 	
 	uint32_t PIPE[PIPE_STAGE];	/* PC being executed at each stage*/
 	uint32_t PIPE_STALL[PIPE_STAGE];
+	uint32_t PIPE_FLUSH[PIPE_STAGE];
 	
 	//IF_ID_latch
 	uint32_t IF_ID_INST;
@@ -73,15 +74,16 @@ typedef struct CPU_State_Struct {
 	//Forwarding
 	unsigned char ID_EX_RS;
 	unsigned char ID_EX_RT;
-	unsigned char ID_EX_RD;
-	unsigned char EX_MEM_RD;
-	unsigned char MEM_WB_RD;
 	unsigned char EX_MEM_RegWrite;
 	unsigned char MEM_WB_RegWrite;
 	// unsigned char EX_MEM_FORWARD_REG;
 	// unsigned char MEM_WB_FORWARD_REG;
 	// uint32_t EX_MEM_FORWARD_VALUE;
 	// uint32_t MEM_WB_FORWARD_VALUE;
+
+	unsigned char IF_ID_RT;
+	unsigned char IF_ID_RS;
+	unsigned char ID_EX_MemRead;
 
 	//To choose right PC
 	uint32_t IF_PC;
