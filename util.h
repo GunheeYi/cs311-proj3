@@ -71,10 +71,17 @@ typedef struct CPU_State_Struct {
 	unsigned char MEM_WB_DEST;
 
 	//Forwarding
-	unsigned char EX_MEM_FORWARD_REG;
-	unsigned char MEM_WB_FORWARD_REG;
-	uint32_t EX_MEM_FORWARD_VALUE;
-	uint32_t MEM_WB_FORWARD_VALUE;
+	unsigned char ID_EX_RS;
+	unsigned char ID_EX_RT;
+	unsigned char ID_EX_RD;
+	unsigned char EX_MEM_RD;
+	unsigned char MEM_WB_RD;
+	unsigned char EX_MEM_RegWrite;
+	unsigned char MEM_WB_RegWrite;
+	// unsigned char EX_MEM_FORWARD_REG;
+	// unsigned char MEM_WB_FORWARD_REG;
+	// uint32_t EX_MEM_FORWARD_VALUE;
+	// uint32_t MEM_WB_FORWARD_VALUE;
 
 	//To choose right PC
 	uint32_t IF_PC;
