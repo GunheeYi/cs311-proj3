@@ -186,7 +186,6 @@ void ID() {
         if (instr.opcode==ANDI || instr.opcode==ORI) CURRENT_STATE.ID_EX_IMM = ZeroExtImm(imm);
         else CURRENT_STATE.ID_EX_IMM = SignExtImm(imm);
 
-        // CURRENT_STATE.ID_EX_RS = (instr.opcode==LW) ? 0 : rs;
         CURRENT_STATE.ID_EX_RS = rs;
         // CURRENT_STATE.ID_EX_RT = (instr.opcode==LW) ? 0 : rt;
         CURRENT_STATE.ID_EX_RT = rt;
@@ -196,7 +195,8 @@ void ID() {
     if (type(instr)=='R') CURRENT_STATE.ID_EX_DEST = rd;
     else if (instr.opcode==JAL) CURRENT_STATE.ID_EX_DEST = 31;
     else CURRENT_STATE.ID_EX_DEST = rt;
-    //printf("DESTTTTTTTTTTTTTTT::::::: 0x%08x\n", CURRENT_STATE.ID_EX_DEST);
+
+    
     
 }
 
@@ -207,7 +207,7 @@ void EX() {
 
     if (CURRENT_STATE.PIPE[3]==0) CURRENT_STATE.EX_MEM_DEST = 0;
 
-    //printf("EX_MEM_DEST: 0x%08x, MEM_WB_DEST: 0x%08x, ID_EX_RS: 0x%08x, ID_EX_RT: 0x%08x\n", CURRENT_STATE.EX_MEM_DEST, CURRENT_STATE.MEM_WB_DEST, CURRENT_STATE.ID_EX_RS, CURRENT_STATE.ID_EX_RT);
+    //printf("ID_EX_RS: 0x%08x, ID_EX_RT: 0x%08x", CURRENT_STATE.ID_EX_RS, CURRENT_STATE.ID_EX_RT);
     if (CURRENT_STATE.EX_MEM_RegWrite && (CURRENT_STATE.EX_MEM_DEST!=0) && (CURRENT_STATE.EX_MEM_DEST==CURRENT_STATE.ID_EX_RS)) {
         CURRENT_STATE.ID_EX_REG1 = CURRENT_STATE.EX_MEM_ALU_OUT;
         //printf("Forwarded rs from EX_MEM to EX\n");
@@ -217,21 +217,16 @@ void EX() {
         //printf("Forwarded rt from EX_MEM to EX\n");
     }
     if (CURRENT_STATE.MEM_WB_RegWrite && (CURRENT_STATE.MEM_WB_DEST!=0) && (CURRENT_STATE.EX_MEM_DEST!=CURRENT_STATE.ID_EX_RS) && (CURRENT_STATE.MEM_WB_DEST==CURRENT_STATE.ID_EX_RS)) {
-        CURRENT_STATE.ID_EX_REG1 = CURRENT_STATE.MEM_WB_MemRead ? CURRENT_STATE.MEM_WB_MEM_OUT : CURRENT_STATE.MEM_WB_ALU_OUT;
+        CURRENT_STATE.ID_EX_REG1 = CURRENT_STATE.MEM_WB_MEM_OUT;
         //printf("Forwarded rs from MEM_WB to EX\n");
     }
     if (CURRENT_STATE.MEM_WB_RegWrite && (CURRENT_STATE.MEM_WB_DEST!=0) && (CURRENT_STATE.EX_MEM_DEST!=CURRENT_STATE.ID_EX_RT) && (CURRENT_STATE.MEM_WB_DEST==CURRENT_STATE.ID_EX_RT)) {
-        CURRENT_STATE.ID_EX_REG2 = CURRENT_STATE.MEM_WB_MemRead ? CURRENT_STATE.MEM_WB_MEM_OUT : CURRENT_STATE.MEM_WB_ALU_OUT;
+        CURRENT_STATE.ID_EX_REG2 = CURRENT_STATE.MEM_WB_MEM_OUT;
         //printf("Forwarded rt from MEM_WB to EX\n");
     }
 
-    CURRENT_STATE.MEM_WB_ALU_OUT = CURRENT_STATE.EX_MEM_ALU_OUT;
-    CURRENT_STATE.MEM_WB_DEST = CURRENT_STATE.EX_MEM_DEST;
-
     uint32_t rtOrImm = (type(instr)=='R' || instr.opcode==BEQ || instr.opcode==BNE) ? CURRENT_STATE.ID_EX_REG2 : CURRENT_STATE.ID_EX_IMM;
     CURRENT_STATE.EX_MEM_ALU_OUT = ALU(instr, CURRENT_STATE.ID_EX_REG1, rtOrImm);
-    //printf("ALU intput -- a: 0x%08x, b: 0x%08x\n", CURRENT_STATE.ID_EX_REG1, rtOrImm);
-    //printf("ALU output -- 0x%08x\n", CURRENT_STATE.EX_MEM_ALU_OUT);
     CURRENT_STATE.EX_MEM_BR_TAKE = CURRENT_STATE.EX_MEM_ALU_OUT;
     //printf("EX Stage -- ALU out: 0x%08x\n", CURRENT_STATE.EX_MEM_ALU_OUT);
 
@@ -256,23 +251,18 @@ void MEM() {
         CURRENT_STATE.PC = CURRENT_STATE.EX_MEM_BR_TARGET;  // and set PC for next instruction
     } else {
         if (instr.opcode==LW) {
-            //printf("Loaded from the address: %08x\n", CURRENT_STATE.EX_MEM_ALU_OUT);
+            // printf("Loaded from the address: %08x\n", CURRENT_STATE.EX_MEM_ALU_OUT);
             CURRENT_STATE.MEM_WB_MEM_OUT = mem_read_32(CURRENT_STATE.EX_MEM_ALU_OUT);
         }
         else if (instr.opcode==SW) mem_write_32(CURRENT_STATE.EX_MEM_ALU_OUT, CURRENT_STATE.EX_MEM_W_VALUE);
 
-        //printf("MEM Stage -- ALU out: 0x%08x\n", CURRENT_STATE.MEM_WB_ALU_OUT);
-    }
-
-    if (CURRENT_STATE.PIPE[3] == MEM_REGIONS[0].start + (NUM_INST-1) * 4) {
         CURRENT_STATE.MEM_WB_ALU_OUT = CURRENT_STATE.EX_MEM_ALU_OUT;
         CURRENT_STATE.MEM_WB_DEST = CURRENT_STATE.EX_MEM_DEST;
-    }
-    //CURRENT_STATE.MEM_WB_ALU_OUT = CURRENT_STATE.EX_MEM_ALU_OUT;
-    //CURRENT_STATE.MEM_WB_DEST = CURRENT_STATE.EX_MEM_DEST;
 
-    CURRENT_STATE.MEM_WB_MemRead = MemRead(instr);
-    CURRENT_STATE.MEM_WB_RegWrite = RegWrite(instr);
+        CURRENT_STATE.MEM_WB_RegWrite = RegWrite(instr);
+
+        //printf("MEM Stage -- ALU out: 0x%08x\n", CURRENT_STATE.MEM_WB_ALU_OUT);
+    }
 }
 
 void WB() {

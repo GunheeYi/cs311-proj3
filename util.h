@@ -84,7 +84,6 @@ typedef struct CPU_State_Struct {
 	unsigned char IF_ID_RT;
 	unsigned char IF_ID_RS;
 	unsigned char ID_EX_MemRead;
-	unsigned char MEM_WB_MemRead;
 
 	//To choose right PC
 	uint32_t IF_PC;
